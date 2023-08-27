@@ -1,0 +1,175 @@
+{
+    "AWSTemplateFormatVersion": "2010-09-09",
+    "Description": "AWS EKS VPC",
+    "Parameters": {
+      "vpcCidrBlock": {
+          "Description": "CIDR block for vpc",
+          "Type": "String",
+          "Default": "10.1.0.0/26"
+      },
+      "subnet01Block": {
+          "Description": "CIDR Block for subnet 01",
+          "Type": "String",
+          "Default": "10.1.0.0/28"
+      },
+      "subnet02Block": {
+          "Description": "CIDR Block for subnet 02",
+          "Type": "String",
+          "Default": "10.1.0.16/28"
+      },
+      "subnet03Block": {
+          "Description": "CIDR Block for subnet 03; will be used only if a region has 3 AZ",
+          "Type": "String",
+          "Default": "10.1.0.32/28"
+      },
+      "AZList": {
+          "Description": "Availability zone list",
+          "Type": "CommaDelimitedList",
+          "Default": "us-east-2a, us-east-2b, us-east-2c"
+      }
+    },
+    "Metadata": {
+      "AWS::CloudFormation::Interface": {
+        "ParameterGroups":[{
+          "Label": {
+            "default": "Worker Network Configuration"
+          },
+          "Parameters": ["vpcCidrBlock", "subnet01Block", "subnet02Block", "subnet03Block"]
+        }]
+      }
+    },
+    "Conditions": {
+      "Has2AZs": {
+        "Fn::Or": [
+          {"Fn::Equals": [{"Ref": "AWS::Region"},"ap-south-1"]},
+          {"Fn::Equals": [{"Ref": "AWS::Region"},"ap-northeast-2"]},
+          {"Fn::Equals": [{"Ref": "AWS::Region"},"ca-central-1"]},
+          {"Fn::Equals": [{"Ref": "AWS::Region"},"cn-north-1"]}
+        ]
+      },
+      "HasMoreThan2AZs":{
+        "Fn::Not": [{"Condition": "Has2AZs"}]
+      }
+    },
+    "Resources": {
+      "MyEKSVPC": {
+        "Type": "AWS::EC2::VPC",
+        "Properties": {
+          "CidrBlock": { "Ref": "vpcCidrBlock" },
+          "EnableDnsSupport": true,
+          "EnableDnsHostnames": true,
+          "Tags": [{ "Key": "Name", "Value": {"Fn::Sub": "${AWS::StackName}-VPC" } }]
+        }
+      },
+      "igwName": {
+        "Type": "AWS::EC2::InternetGateway",
+        "Properties": {
+          "Tags": [{ "Key": "Name", "Value": {"Fn::Sub": "${AWS::StackName}-MyEKSIgway" } }]
+        }
+      },
+      "VPCGatewayAttachment": {
+        "Type": "AWS::EC2::VPCGatewayAttachment",
+        "Properties": {
+          "VpcId": {"Ref": "MyEKSVPC"},
+          "InternetGatewayId": { "Ref": "igwName" }
+        }
+      },
+      "myEKSVPCRouteTable": {
+        "Type": "AWS::EC2::RouteTable",
+        "Properties": {
+          "VpcId": {"Ref": "MyEKSVPC"},
+          "Tags": [{ "Key": "Name", "Value": {"Fn::Sub": "${AWS::StackName}-PublicRT" } },
+                    { "Key": "Network", "Value":  "Public" }]
+        }
+      },
+      "myEKSVPCRoute": {
+        "Type": "AWS::EC2::Route",
+        "Properties": {
+          "RouteTableId": {"Ref": "myEKSVPCRouteTable"},
+          "DestinationCidrBlock": "0.0.0.0/0",
+          "GatewayId": { "Ref": "igwName" }
+        }
+      },
+      "subnet01": {
+        "Type": "AWS::EC2::Subnet",
+        "Metadata": {"Comment":"Subnet 01"},
+        "Properties": {
+          "MapPublicIpOnLaunch": true,
+          "AvailabilityZone": {"Fn::Select" : ["0",{ "Fn::GetAZs" : { "Ref" : "AWS::Region" } } ]},
+          "VpcId": {"Ref": "MyEKSVPC"},
+          "CidrBlock": {"Ref": "subnet01Block"},
+          "Tags": [{ "Key": "Name", "Value": {"Fn::Sub": "${AWS::StackName}-subnet01" } }]
+        }
+      },
+      "subnet02": {
+        "Type": "AWS::EC2::Subnet",
+        "Metadata": {"Comment":"Subnet 01"},
+        "Properties": {
+          "MapPublicIpOnLaunch": true,
+          "AvailabilityZone": {"Fn::Select" : ["1",{ "Fn::GetAZs" : { "Ref" : "AWS::Region" } } ]},
+          "VpcId": {"Ref": "MyEKSVPC"},
+          "CidrBlock": {"Ref": "subnet02Block"},
+          "Tags": [{ "Key": "Name", "Value":  {"Fn::Sub": "${AWS::StackName}-subnet02" } }]
+        }
+      },
+      "subnet03": {
+        "Condition": "HasMoreThan2AZs",
+        "Type": "AWS::EC2::Subnet",
+        "Metadata": {"Comment":"Subnet 01"},
+        "Properties": {
+          "MapPublicIpOnLaunch": true,
+          "AvailabilityZone": {"Fn::Select" : ["2",{ "Fn::GetAZs" : { "Ref" : "AWS::Region" } } ]},
+          "VpcId": {"Ref": "MyEKSVPC"},
+          "CidrBlock": {"Ref": "subnet03Block"},
+          "Tags": [{ "Key": "Name", "Value":  {"Fn::Sub": "${AWS::StackName}-subnet03" } }]
+        }
+      },
+        "Subnet01RouteTableAssocName": {
+          "Type": "AWS::EC2::SubnetRouteTableAssociation",
+          "Properties": {
+            "SubnetId": {"Ref": "subnet01"},
+            "RouteTableId": {"Ref": "myEKSVPCRouteTable"}
+          }
+        },
+        "Subnet02RouteTableAssocName": {
+          "Type": "AWS::EC2::SubnetRouteTableAssociation",
+          "Properties": {
+            "SubnetId": {"Ref": "subnet02"},
+            "RouteTableId": {"Ref": "myEKSVPCRouteTable"}
+          }
+        },
+        "Subnet03RouteTableAssocName": {
+          "Condition": "HasMoreThan2AZs",
+          "Type": "AWS::EC2::SubnetRouteTableAssociation",
+          "Properties": {
+            "SubnetId": {"Ref": "subnet03"},
+            "RouteTableId": {"Ref": "myEKSVPCRouteTable"}
+          }
+        },
+        "ControlPlaneSecurityGroup" : {
+          "Type" : "AWS::EC2::SecurityGroup",
+          "Properties" : {
+            "GroupDescription" : "Cluster communication with worker nodes",
+            "VpcId" : {"Ref": "MyEKSVPC"}
+          }
+        }
+    },
+    "Outputs": {
+        "SubnetIds": {
+          "Description": "All subnets in the VPC",
+          "Value": {"Fn::If": [
+            "HasMoreThan2AZs",
+            {"Fn::Join": [",", [{ "Ref": "subnet01" }, { "Ref": "subnet02" }, { "Ref": "subnet03" } ]]},
+            {"Fn::Join": [",", [ { "Ref": "subnet01" }, { "Ref": "subnet02" }]]}
+            ]}
+        },
+        "SecurityGroups": {
+          "Description":"Security group for the cluster control plane communication with worker nodes",
+          "Value": {"Fn::Join" : [",",[{ "Ref": "ControlPlaneSecurityGroup" }] ]}
+        },
+        "VpcId":{
+          "Description":"EKS VPC ID",
+          "Value": {"Ref": "MyEKSVPC"}
+        }
+    }
+}

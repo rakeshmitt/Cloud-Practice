@@ -1,0 +1,93 @@
+provider "aws"{
+region = local.AWS_REGION
+access_key = local.AWS_ACCESS_KEY
+secret_key = local.AWS_SECRET_KEY
+}
+
+module "ec2instance" {
+	source = "./ec2instance"
+	PROVISION_ASG=local.PROVISION_ASG
+	AWS_REGION=local.AWS_REGION
+	PROVIDER=local.PROVIDER
+	AWS_SECRET_KEY=local.AWS_SECRET_KEY
+	AWS_ACCESS_KEY=local.AWS_ACCESS_KEY
+	SECURITY_GROUP_IDS = ["sg-xxxxxxxxxxx"]
+	IMAGE_ID = "ami-xxxxxxxxxxxx"
+	INSTANCE_TYPE = "t2.large"
+	INSTANCE_NAME = "appname"
+	PUBLIC_KEY_NAME = "EC2KeyPair"
+	USER_DATA_SCRIPT_FILE = "./ec2instance/dockeragent.sh"
+	SUBNET_ID = "subnet-xxxxxxxxxx"
+	ASSIGN_PUBLIC_IP = "true"
+	EC2_MONITORING = "true"
+	ECR_REGISTRY_URL = "xxxxxx.dkr.ecr.us-east-2.amazonaws.com"
+	CONTAINER_IMAGE = "xxxxxxxx.dkr.ecr.us-east-2.amazonaws.com/image:latest"
+	CONTAINER_PORT = "8080"
+	APP_HOST_PORT = "8080"
+}
+
+output "ec2_public_ip" {
+	value=local.EC2_PUBLIC_IP
+}
+
+module "launchtemplate" {
+	source = "./launchtemplate"
+	PROVISION_ASG=local.PROVISION_ASG
+	AWS_REGION=local.AWS_REGION
+	PROVIDER=local.PROVIDER
+	AWS_SECRET_KEY=local.AWS_SECRET_KEY
+	AWS_ACCESS_KEY=local.AWS_ACCESS_KEY
+	SECURITY_GROUP_IDS = ["sg-xxxxxxxxxxx"]
+	IMAGE_ID = "ami-xxxxxxxxxxxxxxx"
+	INSTANCE_TYPE = "t2.small"
+	INSTANCE_NAME = "DemoC"
+	PUBLIC_KEY_NAME = "EC2KeyPair"
+	ECR_REGISTRY_URL = "xxxxxx.dkr.ecr.us-east-2.amazonaws.com"
+	CONTAINER_IMAGE = "xxxxxxxx.dkr.ecr.us-east-2.amazonaws.com/image:latest"
+	CONTAINER_PORT = "8080"
+	APP_HOST_PORT = "8080"
+	USER_DATA_SCRIPT_FILE = "./launchtemplate/dockeragent.sh"
+}
+
+output "launch_template_id" {
+	value=local.LAUNCH_TEMPLATE_ID
+}
+
+module "asg" {
+	source = "./asg"
+	PROVISION_ASG=local.PROVISION_ASG
+	AWS_REGION=local.AWS_REGION
+	PROVIDER=local.PROVIDER
+	AWS_SECRET_KEY=local.AWS_SECRET_KEY
+	AWS_ACCESS_KEY=local.AWS_ACCESS_KEY
+	LAUNCH_TEMPLATE_ID = local.LAUNCH_TEMPLATE_ID
+	ASG_NAME = "DemoC"
+	ASG_MAXSIZE = "3"
+	ASG_MINSIZE = "1"
+	ASG_DESIREDCAPACITY = "2"
+	ASG_SUBNETS_IDS = ["subnet-xxxx","subnet-xxxx","subnet-xxxxx"]
+	LAUNCH_TEMPLATE_VERSION = "$Latest"
+	LB_PORT = "8080"
+	LB_PROTOCOL = "HTTP"
+	APP_HOST_PORT = "8080"
+	VPC_ID = "vpc-xxxx"
+	ENABLE_WEB_WAF = "true"
+	PUBLIC_SUBNET_IDS = ["subnet-xxxxx","subnet-xxxxx","subnet-xxxxxxx"]
+	SECURITY_GROUP_IDS = ["sg-xxxxxxx"]
+	depends_on = [module.launchtemplate]
+}
+
+output "app_lb_dns_name" {
+	value=local.APP_LB_DNS_NAME
+}
+
+locals {
+	PROVISION_ASG="false"
+	AWS_REGION="us-east-2"
+	EC2_PUBLIC_IP=module.ec2instance.ec2_public_ip
+	PROVIDER="aws"
+	APP_LB_DNS_NAME=module.asg.app_lb_dns_name
+	AWS_SECRET_KEY="xxxxxxxxxxxxxxx"
+	AWS_ACCESS_KEY="xxxxxxxxxxxxxxxxxxx"
+	LAUNCH_TEMPLATE_ID=module.launchtemplate.launch_template_id
+}

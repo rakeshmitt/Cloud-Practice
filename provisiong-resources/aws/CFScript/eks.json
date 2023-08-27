@@ -1,0 +1,50 @@
+{
+    "AWSTemplateFormatVersion": "2010-09-09",
+    "Description": "",
+    "Metadata": {
+
+    },
+    "Parameters": {
+      "eksrole": {
+          "Description": "Role for EKS Cluster",
+          "Type": "String",
+          "Default": "arn:aws:iam::760075101517:role/EKS_cluster_role"
+      },
+	  "subnetIds": {
+          "Description": "Subnet IDs",
+          "Type": "List<String>"
+      },
+	  "securityGroupIds": {
+          "Description": "SecurityGroup IDs",
+          "Type": "List<String>"
+      },
+	  "eksVersion": {
+          "Description": "EKS Cluster Version",
+          "Type": "String",
+		  "Default": "1.18"
+      }
+    },
+    "Mappings": {
+
+    },
+    "Conditions": {
+
+    },
+    "Resources": {
+      "myCluster": {
+          "Type": "AWS::EKS::Cluster",
+          "Properties": {
+              "Name": "test",
+              "Version": { "Ref": "eksVersion" },
+              "RoleArn": { "Ref": "eksrole" },
+              "ResourcesVpcConfig": {
+                  "SecurityGroupIds": { "Ref": "securityGroupIds" },
+                  "SubnetIds": { "Ref": "subnetIds" }
+              }
+          }
+      }
+    },
+    "Outputs": {
+
+    }
+}
