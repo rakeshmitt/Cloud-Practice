@@ -1,0 +1,108 @@
+
+module "launchtemplate" {
+	source = "./launchtemplate"
+	AWS_REGION=local.AWS_REGION
+	ECS_CLUSTER_NAME=local.ECS_CLUSTER_NAME
+	PROVIDER=local.PROVIDER
+	AWS_SECRET_KEY=local.AWS_SECRET_KEY
+	AWS_ACCESS_KEY=local.AWS_ACCESS_KEY
+	SECURITY_GROUP_IDS = ["sg-xxxxxx"]
+	IMAGE_ID = "ami-xxxxxxxxxxxx"
+	INSTANCE_TYPE = "t2.micro"
+	PUBLIC_KEY_NAME = "ECSKeyPair"
+	USER_DATA_SCRIPT_FILE = "./launchtemplate/dockeragent.sh"
+	ECS_INSTANCE_ROLE_PROFILE_ARN = "arn:aws:iam::xxxxxxxxxxx:instance-profile/ecsInstanceRole"
+}
+
+output "launch_template_id" {
+	value=local.LAUNCH_TEMPLATE_ID
+}
+
+module "asg" {
+	source = "./asg"
+	AWS_REGION=local.AWS_REGION
+	ECS_CLUSTER_NAME=local.ECS_CLUSTER_NAME
+	PROVIDER=local.PROVIDER
+	AWS_SECRET_KEY=local.AWS_SECRET_KEY
+	AWS_ACCESS_KEY=local.AWS_ACCESS_KEY
+	LAUNCH_TEMPLATE_ID = local.LAUNCH_TEMPLATE_ID
+	ASG_MAXSIZE = "3"
+	ASG_MINSIZE = "1"
+	ASG_DESIREDCAPACITY = "1"
+	SUBNETS_IDS = ["subnet-xxxxx","subnet-xxxxxxxxxx","subnet-xxxxxxxxxx"]
+	LAUNCH_TEMPLATE_VERSION = "$Latest"
+}
+
+output "asg_arn" {
+	value=local.ASG_ARN
+}
+
+module "cluster" {
+	source = "./cluster"
+	AWS_REGION=local.AWS_REGION
+	ECS_CLUSTER_NAME=local.ECS_CLUSTER_NAME
+	PROVIDER=local.PROVIDER
+	AWS_SECRET_KEY=local.AWS_SECRET_KEY
+	AWS_ACCESS_KEY=local.AWS_ACCESS_KEY
+	ASG_ARN = local.ASG_ARN
+	ASG_MAXSIZE = "3"
+	ASG_MINSIZE = "1"
+	ASG_DESIREDCAPACITY = "1"
+}
+
+module "taskdefinition" {
+	source = "./taskdefinition"
+	AWS_REGION=local.AWS_REGION
+	ECS_CLUSTER_NAME=local.ECS_CLUSTER_NAME
+	PROVIDER=local.PROVIDER
+	AWS_SECRET_KEY=local.AWS_SECRET_KEY
+	AWS_ACCESS_KEY=local.AWS_ACCESS_KEY
+	ECS_TASK_NAME = "demo-task"
+	CONTAINER_NAME = "webapp"
+	APP_CONTAINER_PORT = "8080"
+	CONTAINER_DEFINITION_FILE = "./taskdefinition/AppContainer.json"
+	APP_IMAGE = "image/imagename"
+	APP_CPU = "2"
+	APP_MEMORY = "512"
+	APP_HOST_PORT = "8080"
+	TASK_VOL_NAME = "service-storage"
+	TASK_VOL_HOST_PATH = "/ecs/service-storage"
+	TASK_NETWORK_MODE = "bridge"
+}
+
+module "taskservice" {
+	source = "./taskservice"
+	AWS_REGION=local.AWS_REGION
+	ECS_CLUSTER_NAME=local.ECS_CLUSTER_NAME
+	PROVIDER=local.PROVIDER
+	AWS_SECRET_KEY=local.AWS_SECRET_KEY
+	AWS_ACCESS_KEY=local.AWS_ACCESS_KEY
+	SECURITY_GROUP_IDS = ["sg-xxxxxxxx"]
+	ECS_TASK_NAME = "demo-task"
+	CONTAINER_NAME = "webapp"
+	APP_CONTAINER_PORT = "8080"
+	ECS_SERVICE_NAME = "demo-service"
+	ECS_SERVICE_LAUNCH_TYPE = "EC2"
+	SCHEDULING_STRATEGY = "REPLICA"
+	APP_DESIRED_CONTAINER_COUNT = "2"
+	LB_PORT = "8080"
+	LB_PROTOCOL = "HTTP"
+	VPC_ID = "vpc-xxxxxxxx"
+	ENABLE_WEB_WAF = "true"
+	PUBLIC_SUBNET_IDS = ["subnet-xxxxxxxxxx","subnet-xxxxxxxxxx","subnet-xxxxxxxxx"]
+}
+
+output "app_lb_dns_name" {
+	value=local.APP_LB_DNS_NAME
+}
+
+locals {
+	AWS_REGION="us-east-2"
+	ECS_CLUSTER_NAME="demo"
+	PROVIDER="AWS"
+	ASG_ARN=module.asg.asg_arn
+	APP_LB_DNS_NAME=module.taskservice.app_lb_dns_name
+	AWS_SECRET_KEY="xxxxxxxxxxxxxxxxx"
+	AWS_ACCESS_KEY="xxxxxxxxxxxxxxxxxxxx"
+	LAUNCH_TEMPLATE_ID=module.launchtemplate.launch_template_id
+}
